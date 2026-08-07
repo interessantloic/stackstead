@@ -1,0 +1,1 @@
+"""Stackstead application package."""

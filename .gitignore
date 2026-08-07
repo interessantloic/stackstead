@@ -1,0 +1,15 @@
+.env
+compose.override.yaml
+data/
+.pytest_cache/
+__pycache__/
+.venv/
+.coverage
+htmlcov/
+build/
+dist/
+*.py[cod]
+*.db
+*.db-shm
+*.db-wal
+.DS_Store

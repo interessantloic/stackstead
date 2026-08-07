@@ -1,0 +1,8 @@
+# Optional override for NAS users who prefer an explicit host data directory.
+# Copy this file to compose.override.yaml and set STACKSTEAD_DATA_PATH in .env.
+services:
+  stackstead:
+    volumes:
+      - type: bind
+        source: ${STACKSTEAD_DATA_PATH:-./data}
+        target: /data

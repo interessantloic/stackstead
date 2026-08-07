@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>Stackstead</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <main id="setup-screen" class="gate" hidden>
+      <section class="gate-card setup-card">
+        <div class="brand-mark">S</div>
+        <p class="eyebrow">STACKSTEAD</p>
+        <h1 data-i18n="setupTitle">欢迎使用 Stackstead</h1>
+        <p class="muted" data-i18n="setupLead">只需几步即可完成安全的首次部署。</p>
+        <div class="steps"><span id="step-dot-1" class="active">1</span><i></i><span id="step-dot-2">2</span><i></i><span id="step-dot-3">3</span></div>
+        <form id="setup-form" class="form-grid">
+          <div class="setup-step" data-setup-step="1">
+            <label><span data-i18n="language">语言</span><select name="language"><option value="zh-CN">简体中文</option><option value="en">English</option></select></label>
+            <label><span data-i18n="appName">站点名称</span><input name="app_name" value="Stackstead" maxlength="80" required></label>
+            <label><span data-i18n="timezone">时区</span><input name="timezone" value="Asia/Shanghai" required></label>
+            <button id="setup-next" class="primary full" type="button" data-i18n="next">下一步</button>
+          </div>
+          <div class="setup-step" data-setup-step="2" hidden>
+            <label><span data-i18n="username">管理员账号</span><input name="username" autocomplete="username" minlength="3" required></label>
+            <label><span data-i18n="password">管理员密码</span><input name="password" type="password" autocomplete="new-password" minlength="10" required></label>
+            <label><span data-i18n="passwordAgain">确认密码</span><input name="password_again" type="password" autocomplete="new-password" minlength="10" required></label>
+            <p class="muted full" data-i18n="setupHint">密码至少 10 位。数据只保存在你的持久化目录中。</p>
+            <div class="setup-actions full"><button id="setup-back" class="secondary" type="button" data-i18n="back">返回</button><button id="setup-next-2" class="primary" type="button" data-i18n="next">下一步</button></div>
+          </div>
+          <div class="setup-step" data-setup-step="3" hidden>
+            <div class="full">
+              <h2 data-i18n="optionalFeatures">选择可选功能</h2>
+              <p class="muted" data-i18n="optionalFeaturesLead">未启用的功能不会出现在导航中，也不会运行后台检查任务。</p>
+            </div>
+            <label class="feature-choice full">
+              <input class="toggle" name="enable_ipv6" type="checkbox">
+              <span><strong data-i18n="enableIpv6">启用 IPv6 地址监控</strong><small data-i18n="enableIpv6Lead">Reporter 会在目标 NAS 上自动检测公网 IPv6，然后安全地上报给 Stackstead。</small></span>
+            </label>
+            <div id="setup-ipv6-fields" class="full" hidden>
+              <label><span data-i18n="deviceNameOptional">第一台设备名称（可选）</span><input name="first_device_name" maxlength="100" placeholder="NAS"></label>
+              <p class="muted" data-i18n="firstDeviceLead">创建设备后会生成专用且只显示一次的上报令牌。没有 IPv6 的设备也可以正常上报，地址显示为空。</p>
+            </div>
+            <div class="setup-actions full"><button id="setup-back-2" class="secondary" type="button" data-i18n="back">返回</button><button class="primary" type="submit" data-i18n="createAdmin">完成初始化</button></div>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <main id="token-screen" class="gate" hidden>
+      <section class="gate-card">
+        <div class="success-mark">✓</div>
+        <h1 data-i18n="setupDone">初始化完成</h1>
+        <p id="first-token-lead" class="muted" data-i18n="tokenOnlyOnce">请立即保存 IPv6 上报令牌，它只显示这一次。</p>
+        <div id="first-token-row" class="secret-row"><code id="first-token"></code><button id="copy-first-token" class="secondary" type="button" data-i18n="copyToken">复制令牌</button></div>
+        <div id="first-command-block">
+          <p class="muted" data-i18n="reportCommandLead">在对应 NAS 下载 Reporter 后，用定时任务执行下面的命令。脚本会自动检测公网 IPv6。</p>
+          <div class="secret-row command-row"><code id="first-report-command"></code><button id="copy-first-command" class="secondary" type="button" data-i18n="copyCommand">复制命令</button></div>
+          <a class="secondary full download-link" href="/api/ipv6/reporter" data-i18n="downloadReporter">下载 Reporter</a>
+        </div>
+        <button id="enter-app" class="primary full" type="button" data-i18n="enterConsole">进入中控台</button>
+      </section>
+    </main>
+
+    <main id="login-screen" class="gate" hidden>
+      <section class="gate-card login-card">
+        <div class="brand-mark">S</div>
+        <p class="eyebrow">STACKSTEAD</p>
+        <h1 data-i18n="loginTitle">登录中控台</h1>
+        <form id="login-form" class="form-grid">
+          <label><span data-i18n="username">管理员账号</span><input name="username" autocomplete="username" required autofocus></label>
+          <label><span data-i18n="password">管理员密码</span><input name="password" type="password" autocomplete="current-password" required></label>
+          <button class="primary full" type="submit" data-i18n="login">登录</button>
+        </form>
+      </section>
+    </main>
+
+    <div id="app-shell" class="shell" hidden>
+      <aside class="sidebar">
+        <div class="brand"><div class="brand-mark small">S</div><div><strong id="brand-name">Stackstead</strong><span>Console</span></div></div>
+        <nav id="nav"></nav>
+        <div class="side-foot"><span class="health-dot"></span><span data-i18n="serviceOnline">服务运行中</span></div>
+      </aside>
+
+      <header class="mobile-head"><button id="menu-toggle" aria-label="Menu">☰</button><strong id="mobile-brand">Stackstead</strong><button id="mobile-refresh" aria-label="Refresh">↻</button></header>
+
+      <main class="content">
+        <section id="view-overview" class="view"></section>
+        <section id="view-traffic" class="view" hidden></section>
+        <section id="view-ipv6" class="view" hidden></section>
+        <section id="view-notifications" class="view" hidden></section>
+        <section id="view-settings" class="view" hidden></section>
+      </main>
+    </div>
+
+    <dialog id="editor-dialog">
+      <form id="editor-form" method="dialog" class="dialog-card"></form>
+    </dialog>
+    <dialog id="confirm-dialog">
+      <form method="dialog" class="dialog-card compact">
+        <h2 id="confirm-title"></h2><p id="confirm-message" class="muted"></p>
+        <div class="dialog-actions"><button value="cancel" class="secondary" data-i18n="cancel">取消</button><button value="confirm" class="danger" data-i18n="confirm">确认</button></div>
+      </form>
+    </dialog>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
