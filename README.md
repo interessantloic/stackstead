@@ -22,7 +22,7 @@
 ## 支持范围
 
 - Docker Engine 与 Docker Compose v2
-- 已在 x86_64 FNOS 主机完成本地镜像构建和运行；`arm64` 尚未实机验证
+- GHCR 镜像提供 `linux/amd64` 与 `linux/arm64`；已在 x86_64 FNOS 主机运行，`arm64` 尚未实机验证
 - 下载器：qBittorrent、Transmission
 - IPv6 Reporter：具备 `sh`、`ip`、`awk`、`cut`、`sort` 和 `curl` 的 Linux 设备
 
@@ -41,7 +41,7 @@
 ## 首次部署
 
 1. 复制 `.env.example` 为 `.env`，按需调整端口、时区、UID/GID 和刷新间隔。
-2. 运行 `docker compose up -d --build` 构建并启动容器。
+2. 运行 `docker compose pull` 拉取固定版本镜像，再运行 `docker compose up -d` 启动容器。
 3. 打开 Web 地址，选择语言、站点名称和时区，创建管理员。
 4. 选择是否启用 IPv6 监控；如启用，可创建第一台设备并保存只显示一次的设备令牌。
 5. 登录后在“流量面板”添加下载器，在“通知服务”添加 Bark 目标。
@@ -55,8 +55,9 @@
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `COMPOSE_PROJECT_NAME` | `stackstead` | Compose 项目名 |
-| `STACKSTEAD_IMAGE` | `stackstead:0.1.0` | 本地或远程镜像名称与标签 |
-| `STACKSTEAD_PULL_POLICY` | `build` | Compose 镜像获取策略 |
+| `STACKSTEAD_IMAGE` | `ghcr.io/interessantloic/stackstead:0.1.1` | 默认使用的固定版本公开镜像 |
+| `STACKSTEAD_PULL_POLICY` | `missing` | 本地缺少镜像时才从仓库拉取 |
+| `STACKSTEAD_BUILD_IMAGE` | `stackstead:dev` | 仅在源码构建覆盖配置中使用的本地镜像名 |
 | `STACKSTEAD_BIND_ADDRESS` | `0.0.0.0` | 宿主机监听地址 |
 | `STACKSTEAD_HTTP_PORT` | `8080` | Web 发布端口，范围 `1-65535` |
 | `STACKSTEAD_RESTART_POLICY` | `unless-stopped` | 容器重启策略 |
@@ -96,16 +97,25 @@ Reporter 与原 n8n 工作流保持相同的主要选址行为：过滤临时、
 ## 健康检查、升级与恢复
 
 - 健康检查地址为 `GET /health`，正常响应包含 `ok: true`。
-- 升级源码后必须重新构建镜像并重新创建容器；仅重启不会载入新源码。
+- 升级发布版本时先更新 `.env` 中的固定镜像标签，再运行 `docker compose pull` 和 `docker compose up -d`；仅重启不会下载新镜像。
 - 备份前建议停止服务，然后完整复制 `/data`，至少同时保存 `stackstead.db`、SQLite WAL 文件（若存在）、`.secret_key` 和 `uploads/`。
 - 恢复时使用兼容版本镜像，将完整备份放回 `/data` 并保持容器运行用户可读写。
+
+## 从源码构建
+
+普通部署不需要在 NAS 上构建镜像。开发者若需要验证本地源码，可以显式叠加构建配置：
+
+```bash
+docker compose -f compose.yaml -f compose.build.yaml up -d --build
+```
+
+源码构建需要从 Docker Hub 获取 Python 基础镜像。如果日志中的请求被重定向到某个第三方镜像源并返回 `401 Unauthorized`，应检查 Docker 守护进程的 registry mirror 配置；这不是 Stackstead 应用代码或 Python 标签错误。FNOS 的 Docker 设置属于宿主机全局配置，修改前应确认其实际管理方式和对其他容器的影响。
 
 ## 已知限制
 
 - IPv6 监控需要在每台目标设备上部署并定时运行 Reporter；当前尚未提供自动安装器。
 - 当前仅支持一个初始化管理员，尚未提供多用户管理界面。
-- 尚未完成 `arm64` 实机、浏览器矩阵及公开镜像拉取部署验证。
-- Docker Compose 默认从源码构建；公开容器镜像将在后续发布流程中提供。
+- 尚未完成 `arm64` 实机与浏览器矩阵验证；`arm64` 镜像由 GitHub Actions 交叉构建。
 
 ## 开发检查
 
