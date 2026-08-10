@@ -1,0 +1,9 @@
+services:
+  stackstead:
+    image: ${STACKSTEAD_BUILD_IMAGE:-stackstead:dev}
+    pull_policy: build
+    build:
+      context: .
+      args:
+        APP_UID: ${PUID:-1000}
+        APP_GID: ${PGID:-1000}

@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Reporter one-command installation and remote deployment testing are planned.
 
+## [0.1.1] - 2026-08-10
+
+### Added
+
+- Added automated GHCR publishing for versioned `linux/amd64` and `linux/arm64` images with provenance and SBOM attestations.
+- Added an explicit Compose override for developers who need to build from source.
+
+### Changed
+
+- Changed the default Compose deployment to pull the fixed public `ghcr.io/interessantloic/stackstead:0.1.1` image instead of building on the target NAS.
+- Documented the Docker registry mirror failure mode encountered during remote FNOS deployment testing.
+
 ## [0.1.0] - 2026-08-07
 
 ### Added
@@ -24,5 +36,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Added a clipboard fallback for browsers that block the Clipboard API on local HTTP origins.
 
-[Unreleased]: https://github.com/interessantloic/stackstead/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/interessantloic/stackstead/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/interessantloic/stackstead/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/interessantloic/stackstead/releases/tag/v0.1.0
