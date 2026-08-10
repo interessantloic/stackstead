@@ -1,0 +1,95 @@
+name: Export offline bundles
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing Stackstead release version without the v prefix
+        required: true
+        default: "0.1.1"
+        type: string
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  export:
+    name: Export linux/${{ matrix.arch }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - amd64
+          - arm64
+
+    steps:
+      - name: Check out export tooling
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          path: automation
+
+      - name: Check out release configuration
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: v${{ inputs.version }}
+          path: release-source
+
+      - name: Validate release version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version must use the form 1.2.3" >&2
+            exit 1
+          fi
+
+      - name: Pull and export image
+        env:
+          ARCH: ${{ matrix.arch }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          remote_image="ghcr.io/interessantloic/stackstead:$VERSION"
+          local_image="stackstead:$VERSION"
+          bundle_name="stackstead-$VERSION-offline-linux-$ARCH"
+          bundle_dir="$RUNNER_TEMP/$bundle_name"
+
+          mkdir -p "$bundle_dir"
+          docker pull --platform "linux/$ARCH" "$remote_image"
+          docker tag "$remote_image" "$local_image"
+          docker save --output "$bundle_dir/stackstead-$VERSION-linux-$ARCH.tar" "$local_image"
+
+          sed \
+            -e "s|^    image: .*|    image: $local_image|" \
+            -e "s|^    pull_policy: .*|    pull_policy: never|" \
+            release-source/compose.yaml > "$bundle_dir/compose.yaml"
+          cp automation/docs/offline-deployment.md "$bundle_dir/README.md"
+          sed \
+            -e "s|^STACKSTEAD_IMAGE=.*|STACKSTEAD_IMAGE=$local_image|" \
+            -e "s|^STACKSTEAD_PULL_POLICY=.*|STACKSTEAD_PULL_POLICY=never|" \
+            -e "/^STACKSTEAD_BUILD_IMAGE=/d" \
+            release-source/.env.example > "$bundle_dir/.env"
+
+          (
+            cd "$bundle_dir"
+            sha256sum "stackstead-$VERSION-linux-$ARCH.tar" > SHA256SUMS
+          )
+          (
+            cd "$RUNNER_TEMP"
+            zip -9 -r "$bundle_name.zip" "$bundle_name"
+            sha256sum "$bundle_name.zip" > "$bundle_name.zip.sha256"
+          )
+
+      - name: Attach bundle to GitHub Release
+        env:
+          ARCH: ${{ matrix.arch }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          bundle_name="stackstead-$VERSION-offline-linux-$ARCH"
+          gh release upload "v$VERSION" \
+            "$RUNNER_TEMP/$bundle_name.zip" \
+            "$RUNNER_TEMP/$bundle_name.zip.sha256" \
+            --clobber \
+            --repo "$GITHUB_REPOSITORY"
