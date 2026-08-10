@@ -50,6 +50,10 @@
 
 停止服务使用 `docker compose down`，数据会保留。不要在不准备清空数据时添加 `-v`。升级或迁移前应同时备份数据库和 `.secret_key`。
 
+### 无法访问镜像仓库时
+
+GitHub Release 同时提供 `amd64` 和 `arm64` 离线部署压缩包。压缩包内包含已经构建好的 Docker 镜像、专用 `.env`、Compose 文件和导入说明；导入镜像后不会访问 Docker Hub 或 GHCR，也不需要在 NAS 上构建 Python 基础镜像。请根据 NAS 架构下载名称中包含 `offline-linux-amd64` 或 `offline-linux-arm64` 的 ZIP 文件，具体步骤见[离线部署说明](docs/offline-deployment.md)。
+
 ## 配置
 
 | 变量 | 默认值 | 说明 |
@@ -110,6 +114,8 @@ docker compose -f compose.yaml -f compose.build.yaml up -d --build
 ```
 
 源码构建需要从 Docker Hub 获取 Python 基础镜像。如果日志中的请求被重定向到某个第三方镜像源并返回 `401 Unauthorized`，应检查 Docker 守护进程的 registry mirror 配置；这不是 Stackstead 应用代码或 Python 标签错误。FNOS 的 Docker 设置属于宿主机全局配置，修改前应确认其实际管理方式和对其他容器的影响。
+
+如果日志仍然显示 `load build definition from Dockerfile`，则当前部署仍在使用源码构建配置，而不是默认的成品镜像 Compose。离线测试时请使用 Release 压缩包中不含 Dockerfile 的独立目录，避免 FNOS 继续复用旧项目配置。
 
 ## 已知限制
 
