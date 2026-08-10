@@ -7,7 +7,11 @@
 ## 功能
 
 - qBittorrent 与 Transmission 多实例实时上下行速率监控
-- SQLite 本地流量采样、今日累计和 90 天趋势数据
+- 四档上传/下载速率仪表盘，默认上限为 12.5/125 MB/s，并可在后台调整
+- 全局上传/下载配色，统一应用于仪表盘、渐隐面积曲线和累计排行榜
+- SQLite 本地流量采样、今日与近 90 天累计、每日峰值及按下载器筛选的 24H 曲线
+- 30 分钟、1 小时、6 小时与 24 小时自适应流量趋势，支持悬停查看时刻和速率
+- 当日累计与实时速率下载器占比图，以及当日流量排行榜
 - 可在首次向导或设置中完整开关的 IPv6 模块
 - 每设备独立令牌的 IPv6 上报 API，记录完整地址列表及 `/64` 前缀变化
 - 兼容原 n8n 逻辑的 Reporter：优先稳定 global 地址，并排除 temporary、deprecated、mngtmpaddr
@@ -44,7 +48,7 @@
 2. 运行 `docker compose pull` 拉取固定版本镜像，再运行 `docker compose up -d` 启动容器。
 3. 打开 Web 地址，选择语言、站点名称和时区，创建管理员。
 4. 选择是否启用 IPv6 监控；如启用，可创建第一台设备并保存只显示一次的设备令牌。
-5. 登录后在“流量面板”添加下载器，在“通知服务”添加 Bark 目标。
+5. 登录后在“设置 → 流量面板设置”调整上下行配色与仪表盘上限，并在同一区域添加下载器；在“通知服务”添加 Bark 目标。
 
 默认 Compose 使用 Docker 命名卷 `stackstead-data`。NAS 用户若希望直接备份宿主机目录，可复制 `compose.bind.example.yaml` 为 `compose.override.yaml`，然后在 `.env` 中设置 `STACKSTEAD_DATA_PATH`。本地 `.env`、覆盖文件和数据目录均不会加入版本控制。
 
@@ -59,7 +63,7 @@ GitHub Release 同时提供 `amd64` 和 `arm64` 离线部署压缩包。压缩�
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `COMPOSE_PROJECT_NAME` | `stackstead` | Compose 项目名 |
-| `STACKSTEAD_IMAGE` | `ghcr.io/interessantloic/stackstead:0.1.1` | 默认使用的固定版本公开镜像 |
+| `STACKSTEAD_IMAGE` | `ghcr.io/interessantloic/stackstead:0.2.0` | 默认使用的固定版本公开镜像 |
 | `STACKSTEAD_PULL_POLICY` | `missing` | 本地缺少镜像时才从仓库拉取 |
 | `STACKSTEAD_BUILD_IMAGE` | `stackstead:dev` | 仅在源码构建覆盖配置中使用的本地镜像名 |
 | `STACKSTEAD_BIND_ADDRESS` | `0.0.0.0` | 宿主机监听地址 |
@@ -77,6 +81,8 @@ GitHub Release 同时提供 `amd64` 和 `arm64` 离线部署压缩包。压缩�
 | `STACKSTEAD_LOG_MAX_FILES` | `3` | 保留的容器日志文件数 |
 
 下载器密码、Bark 设备码和 IPv6 上报令牌不通过环境变量配置：前两者在管理界面录入并加密保存，令牌只在创建或轮换时显示一次。
+
+流量历史统一保留最近 90 天。“历史累计流量”表示数据库当前保留范围内的累计值，并包含今日尚未落盘的实时累计；超过保留期的分钟采样、每日汇总和峰值记录会自动清理。下载器管理以及流量颜色、仪表盘上下限都位于“设置 → 流量面板设置”。默认上传色为 `#205DA6`、下载色为 `#0E8E3F`，默认仪表盘上限分别为 12.5 MB/s 和 125 MB/s。
 
 ## IPv6 上报
 

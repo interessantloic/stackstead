@@ -2,7 +2,7 @@ name: ${COMPOSE_PROJECT_NAME:-stackstead}
 
 services:
   stackstead:
-    image: ${STACKSTEAD_IMAGE:-ghcr.io/interessantloic/stackstead:0.1.1}
+    image: ${STACKSTEAD_IMAGE:-ghcr.io/interessantloic/stackstead:0.2.0}
     pull_policy: ${STACKSTEAD_PULL_POLICY:-missing}
     user: "${PUID:-1000}:${PGID:-1000}"
     init: true

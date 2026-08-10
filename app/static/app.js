@@ -1,9 +1,13 @@
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+const MB = 1024 * 1024;
 
 const state = {
   language: "zh-CN", settings: {}, user: null, dashboard: null, history: [],
   downloaders: [], devices: [], notifications: [], route: "overview", timer: null,
+  trafficRange: "30m", trafficShareMode: "upload", speedShareMode: "upload",
+  rankingMode: "upload", trafficHistoryOpen: false, trafficHistoryDate: null,
+  trafficHistoryDownloader: null,
 };
 
 const translations = {
@@ -23,7 +27,8 @@ Object.assign(translations["zh-CN"], {
   firstDeviceLead:"创建设备后会生成专用且只显示一次的上报令牌。没有 IPv6 的设备也可以正常上报，地址显示为空。",deviceNameOptional:"第一台设备名称（可选）",
   tokenOnlyOnce:"这是设备身份令牌，不是 IPv6 地址。请立即保存，它只显示这一次。",noFirstToken:"IPv6 已启用。稍后可在 IPv6 页面添加设备。",ipv6Skipped:"IPv6 监控未启用，可稍后在设置中开启。",
   copyToken:"复制令牌",copyCommand:"复制命令",reportCommandLead:"在对应 NAS 下载 Reporter 后，用定时任务执行下面的命令。脚本会自动检测公网 IPv6。",downloadReporter:"下载 Reporter",
-  featureSettings:"可选功能",featureSettingsLead:"关闭 IPv6 后会隐藏相关界面、停止后台检查并拒绝设备上报；已有记录不会删除。",welcomeLeadNoIpv6:"下载器与通知服务的实时状态。",copyFailed:"无法自动复制，请长按或选中文本后手动复制。"
+  featureSettings:"可选功能",featureSettingsLead:"关闭 IPv6 后会隐藏相关界面、停止后台检查并拒绝设备上报；已有记录不会删除。",welcomeLeadNoIpv6:"下载器与通知服务的实时状态。",copyFailed:"无法自动复制，请长按或选中文本后手动复制。",
+  trafficDashboard:"网络流量面板",trafficDashboardLead:"实时查询所有下载器的上下行流量并汇聚展示。",todayTraffic:"今日流量",historyTraffic:"历史累计流量",downloadTraffic:"下载",uploadTraffic:"上传",mostActive:"当前最活跃下载器",noActiveDownloader:"当前没有活动流量",liveSpeed:"实时速率",todayPeak:"今日峰值",trafficChart:"流量图",todayShare:"当日各下载器累计流量",liveShare:"各下载器实时速率",todayRanking:"今日累计流量概览",uploadSort:"上传排序",downloadSort:"下载排序",todayUploadShare:"今日累计上传",todayDownloadShare:"今日累计下载",liveUploadShare:"实时上传速度",liveDownloadShare:"实时下载速度",historyDetail:"历史流量详情",historyDetailLead:"最近 90 天每日累计与 24 小时速率曲线。",allDownloaders:"所有下载器",retainedHistory:"数据库保留范围",trafficSettings:"流量面板设置",trafficSettingsLead:"颜色会同步用于仪表盘、曲线、面积和累计排行榜；上限用于四档仪表盘。",uploadColor:"上传代表色",downloadColor:"下载代表色",uploadMax:"上传仪表盘上限",downloadMax:"下载仪表盘上限",mbPerSecond:"MB/s",downloaderSettings:"下载器管理",noTrafficData:"暂无流量数据",dailyDetail:"当日详情",openHistory:"查看历史",range30m:"30m",range1h:"1h",range6h:"6h",range24h:"24h"
 });
 Object.assign(translations.en, {
   optionalFeatures:"Choose optional features",optionalFeaturesLead:"Disabled features stay out of navigation and do not run background checks.",
@@ -31,7 +36,8 @@ Object.assign(translations.en, {
   firstDeviceLead:"Creating a device generates a dedicated token that is shown once. Devices without IPv6 can still report normally with an empty address.",deviceNameOptional:"First device name (optional)",
   tokenOnlyOnce:"This is the device identity token, not an IPv6 address. Save it now; it is shown only once.",noFirstToken:"IPv6 is enabled. You can add a device later from the IPv6 page.",ipv6Skipped:"IPv6 monitoring is disabled. You can enable it later in Settings.",
   copyToken:"Copy token",copyCommand:"Copy command",reportCommandLead:"Download the Reporter on the target NAS, then schedule the command below. The script detects public IPv6 addresses automatically.",downloadReporter:"Download Reporter",
-  featureSettings:"Optional features",featureSettingsLead:"Disabling IPv6 hides its UI, stops its background check, and rejects device reports. Existing history is preserved.",welcomeLeadNoIpv6:"Live status for downloaders and notifications.",copyFailed:"Automatic copy failed. Select the text and copy it manually."
+  featureSettings:"Optional features",featureSettingsLead:"Disabling IPv6 hides its UI, stops its background check, and rejects device reports. Existing history is preserved.",welcomeLeadNoIpv6:"Live status for downloaders and notifications.",copyFailed:"Automatic copy failed. Select the text and copy it manually.",
+  trafficDashboard:"Network traffic dashboard",trafficDashboardLead:"Live aggregate upload and download traffic across every downloader.",todayTraffic:"Today's traffic",historyTraffic:"Retained traffic",downloadTraffic:"Download",uploadTraffic:"Upload",mostActive:"Most active downloader",noActiveDownloader:"No active traffic",liveSpeed:"Live speed",todayPeak:"Today's peak",trafficChart:"Traffic chart",todayShare:"Traffic by downloader today",liveShare:"Live speed by downloader",todayRanking:"Today's traffic ranking",uploadSort:"Sort by upload",downloadSort:"Sort by download",todayUploadShare:"Uploaded today",todayDownloadShare:"Downloaded today",liveUploadShare:"Live upload speed",liveDownloadShare:"Live download speed",historyDetail:"Traffic history",historyDetailLead:"Daily totals and 24-hour speed curves retained for 90 days.",allDownloaders:"All downloaders",retainedHistory:"Retained database range",trafficSettings:"Traffic dashboard settings",trafficSettingsLead:"Colors apply to gauges, lines, areas and ranking bars. Limits define the four gauge bands.",uploadColor:"Upload color",downloadColor:"Download color",uploadMax:"Upload gauge maximum",downloadMax:"Download gauge maximum",mbPerSecond:"MB/s",downloaderSettings:"Downloader management",noTrafficData:"No traffic data",dailyDetail:"Daily detail",openHistory:"View history",range30m:"30m",range1h:"1h",range6h:"6h",range24h:"24h"
 });
 
 const navItems = [
@@ -68,12 +74,18 @@ function applyTranslations(root = document) {
   document.documentElement.lang = state.language;
 }
 
+function applyTrafficTheme() {
+  const root = document.documentElement;
+  root.style.setProperty("--traffic-upload", state.settings.trafficUploadColor || "#205DA6");
+  root.style.setProperty("--traffic-download", state.settings.trafficDownloadColor || "#0E8E3F");
+}
+
 async function boot() {
   bindGlobalEvents();
   const bootstrap = await api("/api/bootstrap");
   state.settings = bootstrap.settings;
   state.language = bootstrap.settings.language || "zh-CN";
-  applyTranslations();
+  applyTranslations(); applyTrafficTheme();
   if (!bootstrap.initialized) return showOnly("setup-screen");
   try {
     const me = await api("/api/me"); state.user = me; state.settings = me.settings; state.language = me.settings.language; showApp();
@@ -140,9 +152,12 @@ async function login(event) {
 
 function showLogin() { clearInterval(state.timer); showOnly("login-screen"); applyTranslations(); }
 function showApp() {
-  showOnly("app-shell"); applyTranslations();
+  showOnly("app-shell"); applyTranslations(); applyTrafficTheme();
   $("#brand-name").textContent = state.settings.appName || "Stackstead"; $("#mobile-brand").textContent = state.settings.appName || "Stackstead";
-  renderNav(); routeFromHash(); clearInterval(state.timer); state.timer = setInterval(() => state.route === "overview" && loadOverview(false), 5000);
+  renderNav(); routeFromHash(); clearInterval(state.timer); state.timer = setInterval(() => {
+    if (state.route === "overview") loadOverview(false);
+    if (state.route === "traffic" && !state.trafficHistoryOpen) loadTraffic(false);
+  }, 5000);
 }
 
 function visibleNavItems() { return navItems.filter(([route]) => route !== "ipv6" || state.settings.ipv6Enabled); }
@@ -153,7 +168,10 @@ function renderNav() {
 }
 
 function routeFromHash() {
-  const route = location.hash.slice(1); state.route = visibleNavItems().some(item => item[0]===route) ? route : "overview";
+  const requested = location.hash.slice(1);
+  state.trafficHistoryOpen = requested === "traffic-history";
+  const route = state.trafficHistoryOpen ? "traffic" : requested;
+  state.route = visibleNavItems().some(item => item[0]===route) ? route : "overview";
   $$(".view").forEach(node => node.hidden = node.id !== `view-${state.route}`); renderNav(); renderRoute();
 }
 
@@ -163,7 +181,7 @@ async function renderRoute() {
     if (state.route === "traffic") await loadTraffic();
     if (state.route === "ipv6") await loadIPv6();
     if (state.route === "notifications") await loadNotifications();
-    if (state.route === "settings") renderSettings();
+    if (state.route === "settings") await loadSettings();
   } catch (error) { toast(error.message, true); }
 }
 
@@ -173,6 +191,7 @@ async function loadOverview(showLoading = true) {
   const view = $("#view-overview"); if (showLoading && !state.dashboard) view.innerHTML = `<div class="empty">${t("loading")}</div>`;
   const [dashboard, history] = await Promise.all([api("/api/dashboard"), api("/api/traffic/history?hours=24")]);
   state.dashboard = dashboard; state.history = history.items; state.settings = dashboard.settings;
+  applyTrafficTheme();
   const totals = dashboard.traffic.totals; const ipv6 = dashboard.ipv6;
   const ipv6Stats = ipv6 ? `${stat(t("ipv6Devices"),String(ipv6.device_count||0),`${ipv6.active_24h||0} ${t("active24h")}`,"accent-purple")}${stat(t("lastChange"),ipv6.lastChangeAt?formatRelative(ipv6.lastChangeAt):t("never"),ipv6.lastChangeAt?formatDate(ipv6.lastChangeAt):"","")}` : "";
   view.innerHTML = pageHead(t("welcome"),t(ipv6 ? "welcomeLead" : "welcomeLeadNoIpv6"),`<button class="secondary" id="refresh-overview">↻ ${t("refresh")}</button>`) + `
@@ -182,13 +201,13 @@ async function loadOverview(showLoading = true) {
       ${ipv6Stats}
     </div>
     <div class="grid main-grid">
-      <section class="card chart-card"><div class="card-head"><h2>${t("trafficTrend")}</h2><div class="legend"><span><i style="background:#14a36f"></i>${t("downloadSpeed")}</span><span><i style="background:#2878ff"></i>${t("uploadSpeed")}</span></div></div>
-        <div class="live-grid"><div class="speed-box download"><span>${t("todayDownload")}</span><strong>${formatBytes(totals.todayDownloadBytes)}</strong></div><div class="speed-box upload"><span>${t("todayUpload")}</span><strong>${formatBytes(totals.todayUploadBytes)}</strong></div></div>
-        <div class="chart">${trafficChart(state.history)}</div>
+      <section class="card chart-card"><div class="card-head"><h2>${t("trafficTrend")}</h2><div class="legend"><span><i style="background:var(--traffic-download)"></i>${t("downloadSpeed")}</span><span><i style="background:var(--traffic-upload)"></i>${t("uploadSpeed")}</span></div></div>
+        <div class="live-grid"><div class="speed-box download"><span>${t("todayDownload")}</span><strong>${formatTrafficBytes(totals.todayDownloadBytes)}</strong></div><div class="speed-box upload"><span>${t("todayUpload")}</span><strong>${formatTrafficBytes(totals.todayUploadBytes)}</strong></div></div>
+        <div class="overview-traffic-chart">${renderTrafficGraph(appendLivePoint(state.history,totals),{rangeSeconds:86400})}</div>
       </section>
-      <section class="card"><div class="card-head"><h2>${t("downloaders")}</h2><button class="ghost" data-go="traffic">${t("settings")} →</button></div><div class="list">${renderLiveDownloaders(dashboard.traffic.downloaders)}</div></section>
+      <section class="card"><div class="card-head"><h2>${t("downloaders")}</h2><button class="ghost" data-go="settings">${t("settings")} →</button></div><div class="list">${renderLiveDownloaders(dashboard.traffic.downloaders)}</div></section>
     </div>`;
-  $("#refresh-overview").onclick = () => loadOverview(false); $("[data-go=traffic]").onclick = () => location.hash="traffic";
+  $("#refresh-overview").onclick = () => loadOverview(false); $("[data-go=settings]").onclick = () => location.hash="settings";attachTrafficChart(view,appendLivePoint(state.history,totals));
 }
 
 function stat(label,value,trend,extra) { return `<section class="card stat ${extra}"><span class="label">${esc(label)}</span><strong>${esc(value)}</strong><div class="trend">${esc(trend||"")}</div></section>`; }
@@ -198,18 +217,178 @@ function renderLiveDownloaders(items) {
   return items.map(item => `<div class="list-item"><div class="avatar" style="background:${esc(item.color)}20;color:${esc(item.color)}">${item.imageUrl?`<img src="${esc(item.imageUrl)}" alt="">`:esc(item.name.slice(0,2).toUpperCase())}</div><div class="item-main"><strong>${esc(item.name)}</strong><span>↓ ${formatSpeed(item.downloadSpeed)} · ↑ ${formatSpeed(item.uploadSpeed)}</span></div><div class="item-side"><span class="status ${item.status==='online'?'':'offline'}">${t(item.status==='online'?'online':'offline')}</span></div></div>`).join("");
 }
 
-function trafficChart(items) {
-  if (items.length < 2) return `<div class="chart-empty">${t("waiting")}</div>`;
-  const width=800,height=230,pad=12,max=Math.max(1,...items.flatMap(i=>[i.download_speed,i.upload_speed]));
-  const points = key => items.map((item,index)=>`${pad+(index/(items.length-1))*(width-pad*2)},${height-pad-(Number(item[key])/max)*(height-pad*2)}`).join(" ");
-  return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-label="${t('trafficTrend')}"><defs><linearGradient id="gDown" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#14a36f" stop-opacity=".35"/><stop offset="1" stop-color="#14a36f" stop-opacity="0"/></linearGradient></defs><polyline points="${points('download_speed')}" fill="none" stroke="#14a36f" stroke-width="4" vector-effect="non-scaling-stroke"/><polyline points="${points('upload_speed')}" fill="none" stroke="#2878ff" stroke-width="4" vector-effect="non-scaling-stroke"/></svg>`;
+async function loadTraffic(showLoading = true) {
+  if (state.trafficHistoryOpen) return loadTrafficHistory();
+  const view = $("#view-traffic");
+  if (showLoading && !state.dashboard) view.innerHTML = `<div class="empty">${t("loading")}</div>`;
+  const [dashboard, history] = await Promise.all([
+    api("/api/dashboard"),
+    api(`/api/traffic/history?range=${encodeURIComponent(state.trafficRange)}`),
+  ]);
+  state.dashboard = dashboard;
+  state.history = history.items || [];
+  state.settings = dashboard.settings;
+  applyTrafficTheme();
+  const traffic = dashboard.traffic;
+  const totals = traffic.totals;
+  const activeCandidate = [...traffic.downloaders].sort((a,b)=>(b.uploadSpeed+b.downloadSpeed)-(a.uploadSpeed+a.downloadSpeed))[0];
+  const active = activeCandidate && activeCandidate.uploadSpeed + activeCandidate.downloadSpeed > 0 ? activeCandidate : null;
+  const chartItems = appendLivePoint(state.history, totals);
+
+  view.innerHTML = pageHead(t("trafficDashboard"),t("trafficDashboardLead"),`<span class="refresh-note">${esc(traffic.lastPolledAt ? formatRelative(traffic.lastPolledAt) : t("waiting"))}</span>`) + `
+    <div class="traffic-summary-grid">
+      ${renderTrafficSummaryCard(t("todayTraffic"), totals.todayDownloadBytes, totals.todayUploadBytes)}
+      ${renderTrafficSummaryCard(t("historyTraffic"), totals.historyDownloadBytes, totals.historyUploadBytes, `<button class="card-link" id="open-traffic-history">${t("openHistory")} →</button>`)}
+      <section class="card active-downloader-card">
+        <span class="card-kicker">${t("mostActive")}</span>
+        <div class="active-downloader-main">
+          <div class="avatar large">${active?.imageUrl?`<img src="${esc(active.imageUrl)}" alt="">`:esc(active?.name?.slice(0,2)||"--")}</div>
+          <div><strong>${esc(active?.name||"--")}</strong><span>${active?`↑ ${formatSpeed(active.uploadSpeed||0)} · ↓ ${formatSpeed(active.downloadSpeed||0)}`:t("noActiveDownloader")}</span></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="traffic-live-layout">
+      <section class="card gauge-card">
+        <div class="card-head"><h2>${t("liveSpeed")}</h2><span class="refresh-note">${state.settings.pollSeconds || 5}s</span></div>
+        <div class="speed-gauges">
+          ${renderSpeedGauge("upload", totals.uploadSpeed, Number(state.settings.trafficUploadMaxMbps)||12.5, state.settings.trafficUploadColor, traffic.todayPeak.uploadSpeed, traffic.todayPeak.uploadAt)}
+          ${renderSpeedGauge("download", totals.downloadSpeed, Number(state.settings.trafficDownloadMaxMbps)||125, state.settings.trafficDownloadColor, traffic.todayPeak.downloadSpeed, traffic.todayPeak.downloadAt)}
+        </div>
+      </section>
+      <section class="card share-card">
+        <div class="card-head"><h2>${t("liveShare")}</h2></div>
+        ${renderDonut(traffic.downloaders, state.speedShareMode === "upload" ? "uploadSpeed" : "downloadSpeed", state.speedShareMode === "upload" ? t("liveUploadShare") : t("liveDownloadShare"), "speed-share-toggle", true)}
+      </section>
+    </div>
+
+    <section class="card traffic-chart-card">
+      <div class="card-head"><div><h2>${t("trafficChart")}</h2><p class="muted">${t("downloadSpeed")} / ${t("uploadSpeed")}</p></div>${renderRangeButtons()}</div>
+      ${renderTrafficGraph(chartItems, {rangeSeconds: trafficRangeSeconds(state.trafficRange)})}
+    </section>
+
+    <div class="traffic-bottom-layout">
+      <section class="card share-card today-share-card">
+        <div class="card-head"><h2>${t("todayShare")}</h2></div>
+        ${renderDonut(traffic.downloaders, state.trafficShareMode === "upload" ? "todayUploadBytes" : "todayDownloadBytes", state.trafficShareMode === "upload" ? t("todayUploadShare") : t("todayDownloadShare"), "traffic-share-toggle", false)}
+      </section>
+      <section class="card ranking-card">
+        <div class="card-head"><div><h2>${t("todayRanking")}</h2><p class="muted">${state.rankingMode === "upload" ? t("uploadSort") : t("downloadSort")}</p></div><button class="secondary compact-button" id="ranking-toggle">${state.rankingMode === "upload" ? t("uploadSort") : t("downloadSort")}</button></div>
+        ${renderTrafficRanking(traffic.downloaders)}
+      </section>
+    </div>`;
+
+  $("#open-traffic-history").onclick = () => { location.hash = "traffic-history"; };
+  $$('[data-traffic-range]').forEach(button => button.onclick = () => { state.trafficRange=button.dataset.trafficRange;loadTraffic(false); });
+  $("[data-speed-share-toggle]").onclick = () => { state.speedShareMode=state.speedShareMode==="upload"?"download":"upload";loadTraffic(false); };
+  $("[data-traffic-share-toggle]").onclick = () => { state.trafficShareMode=state.trafficShareMode==="upload"?"download":"upload";loadTraffic(false); };
+  $("#ranking-toggle").onclick = () => { state.rankingMode=state.rankingMode==="upload"?"download":"upload";loadTraffic(false); };
+  attachTrafficChart(view, chartItems);
 }
 
-async function loadTraffic() {
-  const result = await api("/api/downloaders"); state.downloaders = result.items; const view=$("#view-traffic");
-  view.innerHTML = pageHead(t("manageDownloaders"),t("manageDownloadersLead"),`<button class="primary" id="add-downloader">＋ ${t("addDownloader")}</button>`) + `<section class="card table-wrap"><table class="table"><thead><tr><th>${t("name")}</th><th>${t("type")}</th><th>${t("address")}</th><th>${t("status")}</th><th>${t("actions")}</th></tr></thead><tbody>${state.downloaders.map(d=>`<tr><td><div style="display:flex;align-items:center;gap:10px"><div class="avatar">${d.imageUrl?`<img src="${esc(d.imageUrl)}" alt="">`:esc(d.name.slice(0,2))}</div><strong>${esc(d.name)}</strong></div></td><td>${d.kind==='qbittorrent'?'qBittorrent':'Transmission'}</td><td class="mono">${esc(d.baseUrl)}</td><td><span class="status ${d.enabled?'':'offline'}">${d.enabled?t("enabled"):t("offline")}</span></td><td><button class="ghost" data-test-downloader="${d.id}">${t("test")}</button><button class="ghost" data-edit="${d.id}">${t("edit")}</button><button class="ghost" data-image="${d.id}">${t("image")}</button><button class="ghost" data-delete="${d.id}">${t("remove")}</button></td></tr>`).join("") || `<tr><td colspan="5"><div class="empty">${t("noDownloaders")}</div></td></tr>`}</tbody></table></section>`;
-  $("#add-downloader").onclick=()=>editDownloader(); $$('[data-test-downloader]').forEach(n=>n.onclick=()=>testDownloader(Number(n.dataset.testDownloader))); $$('[data-edit]').forEach(n=>n.onclick=()=>editDownloader(Number(n.dataset.edit))); $$('[data-delete]').forEach(n=>n.onclick=()=>removeDownloader(Number(n.dataset.delete))); $$('[data-image]').forEach(n=>n.onclick=()=>chooseImage(Number(n.dataset.image)));
+function renderTrafficSummaryCard(label, downloadBytes, uploadBytes, action="") {
+  return `<section class="card traffic-summary-card"><div class="summary-title"><span class="card-kicker">${esc(label)}</span>${action}</div><div class="summary-values"><div class="download"><small>↓ ${t("downloadTraffic")}</small><strong>${formatTrafficBytes(downloadBytes)}</strong></div><i></i><div class="upload"><small>↑ ${t("uploadTraffic")}</small><strong>${formatTrafficBytes(uploadBytes)}</strong></div></div></section>`;
 }
+
+function renderSpeedGauge(type, value, maxMb, color, peak, peakAt) {
+  const ratio = Math.max(0, Math.min(1, (Number(value)||0)/(maxMb*MB)));
+  const level = ratio <= 0 ? 0 : Math.min(4, Math.ceil(ratio*4));
+  const alpha = [0,.25,.5,.75,1][level];
+  const readingColor = ratio > 0 ? hexRgba(color,alpha) : "var(--muted)";
+  const center={x:120,y:124}, tip=polarPoint(center.x,center.y,72,-180+ratio*180);
+  const arcs=[0,1,2,3].map(index=>`<path d="${describeArc(center.x,center.y,88,-180+index*45,-180+index*45+40)}" stroke="${esc(color)}" stroke-opacity="${[.25,.5,.75,1][index]}"/>`).join("");
+  return `<article class="speed-gauge is-${type}"><svg viewBox="0 0 240 145" aria-hidden="true"><g class="gauge-arcs">${arcs}</g><line class="gauge-needle" x1="${center.x}" y1="${center.y}" x2="${tip.x.toFixed(2)}" y2="${tip.y.toFixed(2)}"/><circle class="gauge-pin" cx="${center.x}" cy="${center.y}" r="8"/></svg><div class="gauge-reading" style="color:${readingColor}"><strong>${((Number(value)||0)/MB).toFixed(2)}</strong><span>MB/s</span></div><div class="gauge-name">${t(type==="upload"?"uploadSpeed":"downloadSpeed")} · 0–${formatCompactNumber(maxMb)} MB/s</div><small>${t("todayPeak")} ${peak?formatSpeed(peak):"--"}${peakAt?` · ${formatTime(peakAt)}`:""}</small></article>`;
+}
+
+function renderDonut(items, field, title, toggleAttribute, speed) {
+  const sorted=[...items].filter(item=>(Number(item[field])||0)>0).sort((a,b)=>(b[field]||0)-(a[field]||0));
+  const total=sorted.reduce((sum,item)=>sum+(Number(item[field])||0),0);
+  let offset=0;
+  const segments=sorted.map(item=>{const percent=total?(Number(item[field])||0)/total*100:0;const visible=Math.max(0,percent-.8);const circle=`<circle class="donut-segment" cx="50" cy="50" r="40" pathLength="100" stroke="${esc(item.color||"#6c7fa5")}" stroke-dasharray="${visible.toFixed(3)} ${(100-visible).toFixed(3)}" stroke-dashoffset="${(-offset).toFixed(3)}"><title>${esc(item.name)} · ${speed?formatSpeed(item[field]):formatTrafficBytes(item[field])}</title></circle>`;offset+=percent;return circle;}).join("");
+  return `<div class="donut-layout"><button class="donut" type="button" data-${toggleAttribute} aria-label="${esc(title)}"><svg viewBox="0 0 100 100" aria-hidden="true"><circle class="donut-track" cx="50" cy="50" r="40"/>${segments}</svg><span class="donut-center"><strong>${speed?formatSpeedShort(total):formatTrafficBytes(total)}</strong><span>${esc(title)}</span></span></button><div class="donut-list">${sorted.map(item=>`<div><i style="background:${esc(item.color||"#6c7fa5")}"></i><span>${esc(item.name)}</span><strong>${speed?formatSpeed(item[field]):formatTrafficBytes(item[field])}</strong></div>`).join("")||`<p class="muted">${t("noTrafficData")}</p>`}</div></div>`;
+}
+
+function renderTrafficRanking(items) {
+  const sortField=state.rankingMode==="upload"?"todayUploadBytes":"todayDownloadBytes";
+  const sorted=[...items].sort((a,b)=>(b[sortField]||0)-(a[sortField]||0));
+  const uploadMax=Math.max(1,...sorted.map(item=>Number(item.todayUploadBytes)||0));
+  const downloadMax=Math.max(1,...sorted.map(item=>Number(item.todayDownloadBytes)||0));
+  return `<div class="traffic-ranking">${sorted.map(item=>`<article class="ranking-row"><div class="ranking-name"><span class="avatar tiny">${item.imageUrl?`<img src="${esc(item.imageUrl)}" alt="">`:esc(item.name.slice(0,2))}</span><strong>${esc(item.name)}</strong></div><div class="ranking-bars"><div><span>↑</span><i><b class="upload-bar" style="width:${((item.todayUploadBytes||0)/uploadMax*100).toFixed(2)}%"></b></i><em>${formatTrafficBytes(item.todayUploadBytes||0)}</em></div><div><span>↓</span><i><b class="download-bar" style="width:${((item.todayDownloadBytes||0)/downloadMax*100).toFixed(2)}%"></b></i><em>${formatTrafficBytes(item.todayDownloadBytes||0)}</em></div></div></article>`).join("")||`<div class="empty compact">${t("noDownloaders")}</div>`}</div>`;
+}
+
+function renderRangeButtons() {
+  return `<div class="range-switch">${["30m","1h","6h","24h"].map(key=>`<button class="${state.trafficRange===key?"active":""}" data-traffic-range="${key}">${t(`range${key}`)}</button>`).join("")}</div>`;
+}
+
+function appendLivePoint(items, totals) {
+  const result=[...(items||[])];
+  const last=result.at(-1);const now=new Date().toISOString();
+  if (!last || Date.now()-Date.parse(last.sampled_at)>5000) result.push({sampled_at:now,download_speed:totals.downloadSpeed||0,upload_speed:totals.uploadSpeed||0});
+  return result;
+}
+
+function trafficRangeSeconds(key){return {"30m":1800,"1h":3600,"6h":21600,"24h":86400}[key]||1800;}
+
+function renderTrafficGraph(items, options={}) {
+  if (!items?.length) return `<div class="chart-empty">${t("waiting")}</div>`;
+  const width=900,height=330,pad={left:54,right:14,top:18,bottom:28};
+  const values=items.map(item=>({time:Date.parse(item.sampled_at),download:Number(item.download_speed)||0,upload:Number(item.upload_speed)||0})).filter(item=>Number.isFinite(item.time));
+  if (!values.length) return `<div class="chart-empty">${t("waiting")}</div>`;
+  const end=options.endTime||Date.now();const start=options.startTime||(end-(options.rangeSeconds||1800));
+  const maxValue=niceTrafficMax(Math.max(...values.flatMap(item=>[item.download,item.upload]),1));
+  const plotWidth=width-pad.left-pad.right,plotHeight=height-pad.top-pad.bottom;
+  const pointFor=(item,key)=>({x:pad.left+Math.max(0,Math.min(1,(item.time-start)/Math.max(1,end-start)))*plotWidth,y:pad.top+(1-Math.max(0,Math.min(1,item[key]/maxValue)))*plotHeight});
+  const down=values.map(item=>pointFor(item,"download"));const up=values.map(item=>pointFor(item,"upload"));
+  const downLine=smoothPath(down),upLine=smoothPath(up);const baseline=pad.top+plotHeight;
+  const downArea=`${downLine} L ${down.at(-1).x.toFixed(2)} ${baseline} L ${down[0].x.toFixed(2)} ${baseline} Z`;
+  const upArea=`${upLine} L ${up.at(-1).x.toFixed(2)} ${baseline} L ${up[0].x.toFixed(2)} ${baseline} Z`;
+  const yGrid=[0,1,2,3,4].map(index=>{const y=pad.top+plotHeight*(index/4);const value=maxValue*(1-index/4);return `<line x1="${pad.left}" y1="${y}" x2="${width-pad.right}" y2="${y}"/><text x="${pad.left-8}" y="${y+4}" text-anchor="end">${formatAxisSpeed(value)}</text>`;}).join("");
+  const xLabels=[0,1,2,3,4,5,6].map(index=>{const ratio=index/6,x=pad.left+ratio*plotWidth,date=new Date(start+(end-start)*ratio);return `<text x="${x}" y="${height-5}" text-anchor="${index===0?"start":index===6?"end":"middle"}">${formatShortTime(date)}</text>`;}).join("");
+  return `<div class="traffic-graph" data-traffic-chart data-chart-start="${start}" data-chart-end="${end}" data-chart-left="${pad.left/width}" data-chart-right="${pad.right/width}"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none"><defs><linearGradient id="trafficDownloadArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${esc(state.settings.trafficDownloadColor||"#0E8E3F")}" stop-opacity=".25"/><stop offset="1" stop-color="${esc(state.settings.trafficDownloadColor||"#0E8E3F")}" stop-opacity=".02"/></linearGradient><linearGradient id="trafficUploadArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${esc(state.settings.trafficUploadColor||"#205DA6")}" stop-opacity=".25"/><stop offset="1" stop-color="${esc(state.settings.trafficUploadColor||"#205DA6")}" stop-opacity=".02"/></linearGradient></defs><g class="traffic-grid">${yGrid}${xLabels}</g><path class="traffic-area download-area" d="${downArea}"/><path class="traffic-area upload-area" d="${upArea}"/><path class="traffic-line download-line" d="${downLine}"/><path class="traffic-line upload-line" d="${upLine}"/></svg><div class="chart-crosshair"></div><div class="chart-tooltip-html"><strong></strong><span class="tooltip-download"></span><span class="tooltip-upload"></span></div></div>`;
+}
+
+function smoothPath(points) {
+  if (!points.length) return "";if(points.length===1)return `M ${points[0].x} ${points[0].y}`;
+  let path=`M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
+  for(let index=0;index<points.length-1;index++){const current=points[index],next=points[index+1],midX=(current.x+next.x)/2,midY=(current.y+next.y)/2;path+=` Q ${current.x.toFixed(2)} ${current.y.toFixed(2)} ${midX.toFixed(2)} ${midY.toFixed(2)}`;}
+  const last=points.at(-1);return `${path} L ${last.x.toFixed(2)} ${last.y.toFixed(2)}`;
+}
+
+function niceTrafficMax(bytes) {
+  const mb=bytes/MB;const candidates=[5,10,12.5,25,50,75,100,125];const next=candidates.find(value=>value>mb);
+  if(next)return next*MB;const step=mb<500?25:mb<1000?50:100;return (Math.floor(mb/step)+1)*step*MB;
+}
+
+function attachTrafficChart(root, items) {
+  const chart=$("[data-traffic-chart]",root);if(!chart||!items?.length)return;
+  const tooltip=$(".chart-tooltip-html",chart),crosshair=$(".chart-crosshair",chart);const start=Number(chart.dataset.chartStart),end=Number(chart.dataset.chartEnd),left=Number(chart.dataset.chartLeft),right=Number(chart.dataset.chartRight);
+  const values=items.map(item=>({...item,time:Date.parse(item.sampled_at)})).filter(item=>Number.isFinite(item.time));
+  const move=event=>{const rect=chart.getBoundingClientRect(),raw=(event.clientX-rect.left)/rect.width,ratio=Math.max(0,Math.min(1,(raw-left)/(1-left-right))),target=start+(end-start)*ratio;let nearest=values[0];for(const item of values)if(Math.abs(item.time-target)<Math.abs(nearest.time-target))nearest=item;const x=left+(nearest.time-start)/Math.max(1,end-start)*(1-left-right);crosshair.style.left=`${x*100}%`;tooltip.style.left=`${Math.max(8,Math.min(78,x*100))}%`;tooltip.querySelector("strong").textContent=formatShortTime(new Date(nearest.time));tooltip.querySelector(".tooltip-download").textContent=`↓ ${t("downloadSpeed")} ${formatSpeed(nearest.download_speed)}`;tooltip.querySelector(".tooltip-upload").textContent=`↑ ${t("uploadSpeed")} ${formatSpeed(nearest.upload_speed)}`;chart.classList.add("hovering");};
+  chart.addEventListener("pointermove",move);chart.addEventListener("pointerdown",move);chart.addEventListener("pointerleave",()=>chart.classList.remove("hovering"));
+}
+
+async function loadTrafficHistory() {
+  const view=$("#view-traffic");view.innerHTML=`<div class="empty">${t("loading")}</div>`;
+  const history=await api("/api/traffic/daily?limit=90");
+  if(!history.items.length){view.innerHTML=pageHead(t("historyDetail"),t("historyDetailLead"),`<button class="secondary" id="traffic-history-back">← ${t("back")}</button>`)+`<section class="card empty">${t("noTrafficData")}</section>`;$("#traffic-history-back").onclick=()=>location.hash="traffic";return;}
+  if(!state.trafficHistoryDate||!history.items.some(item=>item.dateKey===state.trafficHistoryDate))state.trafficHistoryDate=history.items[0].dateKey;
+  const query=state.trafficHistoryDownloader?`?downloader_id=${state.trafficHistoryDownloader}`:"";
+  const detail=await api(`/api/traffic/daily/${state.trafficHistoryDate}${query}`);
+  const dayStart=Date.parse(detail.startAt),dayEnd=Date.parse(detail.endAt);
+  view.innerHTML=pageHead(t("historyDetail"),t("historyDetailLead"),`<button class="secondary" id="traffic-history-back">← ${t("back")}</button>`)+`<div class="history-layout"><aside class="card history-days">${history.items.map(item=>`<button class="${item.dateKey===state.trafficHistoryDate?"active":""}" data-history-date="${item.dateKey}"><strong>${esc(item.dateKey)}</strong><span>↑ ${formatTrafficBytes(item.uploadBytes)} · ↓ ${formatTrafficBytes(item.downloadBytes)}</span></button>`).join("")}</aside><section class="history-detail-stack"><section class="card"><div class="card-head"><div><h2>${esc(detail.dateKey)}</h2><p class="muted">${t("dailyDetail")}</p></div><select id="history-downloader"><option value="">${t("allDownloaders")}</option>${detail.downloaders.map(item=>`<option value="${item.id}" ${Number(state.trafficHistoryDownloader)===item.id?"selected":""}>${esc(item.name)}</option>`).join("")}</select></div><div class="history-totals"><div class="upload"><span>↑ ${t("uploadTraffic")}</span><strong>${formatTrafficBytes(detail.uploadBytes)}</strong></div><div class="download"><span>↓ ${t("downloadTraffic")}</span><strong>${formatTrafficBytes(detail.downloadBytes)}</strong></div></div>${renderTrafficGraph(detail.items,{startTime:dayStart,endTime:dayEnd})}</section><section class="card"><div class="card-head"><h2>${t("downloaders")}</h2></div>${renderTrafficRanking(detail.downloaders.map(item=>({...item,todayUploadBytes:item.uploadBytes,todayDownloadBytes:item.downloadBytes})))}</section></section></div>`;
+  $("#traffic-history-back").onclick=()=>location.hash="traffic";
+  $$('[data-history-date]').forEach(button=>button.onclick=()=>{state.trafficHistoryDate=button.dataset.historyDate;state.trafficHistoryDownloader=null;loadTrafficHistory();});
+  $("#history-downloader").onchange=event=>{state.trafficHistoryDownloader=event.target.value?Number(event.target.value):null;loadTrafficHistory();};
+  attachTrafficChart(view,detail.items);
+}
+
+function polarPoint(cx,cy,r,angle){const radians=angle*Math.PI/180;return{x:cx+r*Math.cos(radians),y:cy+r*Math.sin(radians)};}
+function describeArc(cx,cy,r,startAngle,endAngle){const start=polarPoint(cx,cy,r,startAngle),end=polarPoint(cx,cy,r,endAngle);return `M ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${r} ${r} 0 0 1 ${end.x.toFixed(2)} ${end.y.toFixed(2)}`;}
+function hexRgba(hex,alpha){const clean=String(hex||"#000000").replace("#","");const value=parseInt(clean,16);return `rgba(${(value>>16)&255},${(value>>8)&255},${value&255},${alpha})`;}
+function formatCompactNumber(value){return Number.isInteger(value)?String(value):Number(value).toFixed(1).replace(/\.0$/,"");}
+function formatSpeedShort(value){const mb=(Number(value)||0)/MB;return `${mb>=10?mb.toFixed(1):mb.toFixed(2)} MB/s`;}
+function formatAxisSpeed(value){const mb=value/MB;return mb>=10?`${mb.toFixed(0)}`:`${mb.toFixed(1)}`;}
+function formatShortTime(value){return new Intl.DateTimeFormat(state.language,{hour:"2-digit",minute:"2-digit"}).format(value);}
 
 function editDownloader(id=null) {
   const item=state.downloaders.find(x=>x.id===id); const form=$("#editor-form");
@@ -224,12 +403,12 @@ function editDownloader(id=null) {
     <label style="display:flex;align-items:center;flex-direction:row"><input class="toggle" name="enabled" type="checkbox" ${item?.enabled!==false?'checked':''}><span>${t("enabled")}</span></label>
     <label style="display:flex;align-items:center;flex-direction:row"><input class="toggle" name="verify_tls" type="checkbox" ${item?.verifyTls!==false?'checked':''}><span>${t("verifyTls")}</span></label></div>
     <div class="dialog-actions"><button type="button" class="secondary" data-close>${t("cancel")}</button><button type="submit" class="primary">${t("save")}</button></div>`;
-  form.onsubmit=async event=>{event.preventDefault();const values=Object.fromEntries(new FormData(form));values.enabled=$('[name=enabled]',form).checked;values.verify_tls=$('[name=verify_tls]',form).checked;if(item&& !values.password) values.password=null;try{await api(`/api/downloaders${item?`/${item.id}`:''}`,{method:item?'PUT':'POST',body:JSON.stringify(values)});$("#editor-dialog").close();toast(t("saved"));loadTraffic();}catch(error){toast(error.message,true);}};
+  form.onsubmit=async event=>{event.preventDefault();const values=Object.fromEntries(new FormData(form));values.enabled=$('[name=enabled]',form).checked;values.verify_tls=$('[name=verify_tls]',form).checked;if(item&& !values.password) values.password=null;try{await api(`/api/downloaders${item?`/${item.id}`:''}`,{method:item?'PUT':'POST',body:JSON.stringify(values)});$("#editor-dialog").close();toast(t("saved"));loadSettings();}catch(error){toast(error.message,true);}};
   $('[data-close]',form).onclick=()=>$("#editor-dialog").close(); $("#editor-dialog").showModal();
 }
 
-function chooseImage(id) { const input=document.createElement("input");input.type="file";input.accept="image/png,image/jpeg,image/webp,image/gif";input.onchange=async()=>{if(!input.files[0])return;const body=new FormData();body.append("image",input.files[0]);try{await api(`/api/downloaders/${id}/image`,{method:"POST",body});toast(t("saved"));loadTraffic();}catch(error){toast(error.message,true);}};input.click(); }
-async function removeDownloader(id) { if(!await confirmAction(t("confirmDelete"),t("deleteDownloaderText")))return;try{await api(`/api/downloaders/${id}`,{method:"DELETE"});toast(t("deleted"));loadTraffic();}catch(error){toast(error.message,true);} }
+function chooseImage(id) { const input=document.createElement("input");input.type="file";input.accept="image/png,image/jpeg,image/webp,image/gif";input.onchange=async()=>{if(!input.files[0])return;const body=new FormData();body.append("image",input.files[0]);try{await api(`/api/downloaders/${id}/image`,{method:"POST",body});toast(t("saved"));loadSettings();}catch(error){toast(error.message,true);}};input.click(); }
+async function removeDownloader(id) { if(!await confirmAction(t("confirmDelete"),t("deleteDownloaderText")))return;try{await api(`/api/downloaders/${id}`,{method:"DELETE"});toast(t("deleted"));loadSettings();}catch(error){toast(error.message,true);} }
 async function testDownloader(id) { try { const result=await api(`/api/downloaders/${id}/test`,{method:"POST"});toast(`${t("connectionOk")}: ↓ ${formatSpeed(result.downloadSpeed)} · ↑ ${formatSpeed(result.uploadSpeed)}`); } catch(error) { toast(error.message,true); } }
 
 async function loadIPv6() {
@@ -277,13 +456,22 @@ function editTarget(id=null) {
 async function testTarget(id){try{await api(`/api/notifications/${id}/test`,{method:"POST"});toast(t("testSent"));}catch(error){toast(error.message,true);}}
 async function removeTarget(id){if(!await confirmAction(t("confirmDelete"),t("deleteTargetText")))return;try{await api(`/api/notifications/${id}`,{method:"DELETE"});toast(t("deleted"));loadNotifications();}catch(error){toast(error.message,true);}}
 
-function renderSettings() {
-  const s=state.settings;const view=$("#view-settings");
-  view.innerHTML=pageHead(t("settings"),t("siteSettings"))+`<div class="settings-sections"><section class="card"><div class="card-head"><h2>${t("general")}</h2></div><form id="general-form" class="inline-form"><label><span>${t("appName")}</span><input name="app_name" value="${esc(s.appName||"")}" required></label><label><span>${t("language")}</span><select name="language"><option value="zh-CN" ${s.language==='zh-CN'?'selected':''}>简体中文</option><option value="en" ${s.language==='en'?'selected':''}>English</option></select></label><label><span>${t("timezone")}</span><input name="timezone" value="${esc(s.timezone||"Asia/Shanghai")}" required></label><button class="primary" type="submit">${t("save")}</button></form></section><section class="card"><div class="card-head"><div><h2>${t("featureSettings")}</h2><p class="muted">${t("featureSettingsLead")}</p></div></div><form id="features-form"><label class="feature-choice"><input class="toggle" name="ipv6_enabled" type="checkbox" ${s.ipv6Enabled?'checked':''}><span><strong>${t("enableIpv6")}</strong><small>${t("enableIpv6Lead")}</small></span></label><div class="dialog-actions"><button class="primary" type="submit">${t("save")}</button></div></form></section><section class="card"><div class="card-head"><h2>${t("security")}</h2></div><div class="actions"><button class="danger" id="logout">${t("signOut")}</button></div></section></div>`;
-  $("#general-form").onsubmit=saveGeneral;$("#features-form").onsubmit=saveFeatures;$("#logout").onclick=logout;
+async function loadSettings() {
+  const result=await api("/api/downloaders");state.downloaders=result.items;const s=state.settings;const view=$("#view-settings");
+  view.innerHTML=pageHead(t("settings"),t("siteSettings"))+`<div class="settings-sections">
+    <section class="card settings-section"><div class="card-head"><h2>${t("general")}</h2></div><form id="general-form" class="inline-form"><label><span>${t("appName")}</span><input name="app_name" value="${esc(s.appName||"")}" required></label><label><span>${t("language")}</span><select name="language"><option value="zh-CN" ${s.language==='zh-CN'?'selected':''}>简体中文</option><option value="en" ${s.language==='en'?'selected':''}>English</option></select></label><label><span>${t("timezone")}</span><input name="timezone" value="${esc(s.timezone||"Asia/Shanghai")}" required></label><button class="primary" type="submit">${t("save")}</button></form></section>
+    <section class="card settings-section"><div class="card-head"><div><h2>${t("trafficSettings")}</h2><p class="muted">${t("trafficSettingsLead")}</p></div></div><form id="traffic-settings-form" class="traffic-settings-form"><label><span>${t("uploadColor")}</span><input name="upload_color" type="color" value="${esc(s.trafficUploadColor||"#205DA6")}"></label><label><span>${t("downloadColor")}</span><input name="download_color" type="color" value="${esc(s.trafficDownloadColor||"#0E8E3F")}"></label><label><span>${t("uploadMax")} (${t("mbPerSecond")})</span><input name="upload_max_mbps" type="number" min="0.1" max="100000" step="0.1" value="${esc(s.trafficUploadMaxMbps||12.5)}" required></label><label><span>${t("downloadMax")} (${t("mbPerSecond")})</span><input name="download_max_mbps" type="number" min="0.1" max="100000" step="0.1" value="${esc(s.trafficDownloadMaxMbps||125)}" required></label><button class="primary" type="submit">${t("save")}</button></form></section>
+    <section class="card settings-section"><div class="card-head"><div><h2>${t("downloaderSettings")}</h2><p class="muted">${t("manageDownloadersLead")}</p></div><button class="primary" id="add-downloader">＋ ${t("addDownloader")}</button></div>${renderDownloaderTable()}</section>
+    <section class="card settings-section"><div class="card-head"><div><h2>${t("featureSettings")}</h2><p class="muted">${t("featureSettingsLead")}</p></div></div><form id="features-form"><label class="feature-choice"><input class="toggle" name="ipv6_enabled" type="checkbox" ${s.ipv6Enabled?'checked':''}><span><strong>${t("enableIpv6")}</strong><small>${t("enableIpv6Lead")}</small></span></label><div class="dialog-actions"><button class="primary" type="submit">${t("save")}</button></div></form></section>
+    <section class="card settings-section"><div class="card-head"><h2>${t("security")}</h2></div><div class="actions"><button class="danger" id="logout">${t("signOut")}</button></div></section></div>`;
+  $("#general-form").onsubmit=saveGeneral;$("#traffic-settings-form").onsubmit=saveTrafficSettings;$("#features-form").onsubmit=saveFeatures;$("#logout").onclick=logout;$("#add-downloader").onclick=()=>editDownloader();
+  $$('[data-test-downloader]').forEach(node=>node.onclick=()=>testDownloader(Number(node.dataset.testDownloader)));$$('[data-edit]').forEach(node=>node.onclick=()=>editDownloader(Number(node.dataset.edit)));$$('[data-delete]').forEach(node=>node.onclick=()=>removeDownloader(Number(node.dataset.delete)));$$('[data-image]').forEach(node=>node.onclick=()=>chooseImage(Number(node.dataset.image)));
 }
 
+function renderDownloaderTable(){return `<div class="table-wrap"><table class="table"><thead><tr><th>${t("name")}</th><th>${t("type")}</th><th>${t("address")}</th><th>${t("status")}</th><th>${t("actions")}</th></tr></thead><tbody>${state.downloaders.map(d=>`<tr><td><div class="downloader-name-cell"><div class="avatar">${d.imageUrl?`<img src="${esc(d.imageUrl)}" alt="">`:esc(d.name.slice(0,2))}</div><strong>${esc(d.name)}</strong></div></td><td>${d.kind==='qbittorrent'?'qBittorrent':'Transmission'}</td><td class="mono">${esc(d.baseUrl)}</td><td><span class="status ${d.enabled?'':'offline'}">${d.enabled?t("enabled"):t("offline")}</span></td><td><button class="ghost" data-test-downloader="${d.id}">${t("test")}</button><button class="ghost" data-edit="${d.id}">${t("edit")}</button><button class="ghost" data-image="${d.id}">${t("image")}</button><button class="ghost" data-delete="${d.id}">${t("remove")}</button></td></tr>`).join("")||`<tr><td colspan="5"><div class="empty compact">${t("noDownloaders")}</div></td></tr>`}</tbody></table></div>`;}
+
 async function saveGeneral(event){event.preventDefault();const values=Object.fromEntries(new FormData(event.target));try{const result=await api("/api/settings/general",{method:"PUT",body:JSON.stringify(values)});state.settings=result;state.language=result.language;applyTranslations();toast(t("saved"));showApp();}catch(error){toast(error.message,true);}}
+async function saveTrafficSettings(event){event.preventDefault();const values=Object.fromEntries(new FormData(event.target));values.upload_max_mbps=Number(values.upload_max_mbps);values.download_max_mbps=Number(values.download_max_mbps);try{const result=await api("/api/settings/traffic",{method:"PUT",body:JSON.stringify(values)});state.settings=result;applyTrafficTheme();toast(t("saved"));loadSettings();}catch(error){toast(error.message,true);}}
 async function saveFeatures(event){event.preventDefault();const values={ipv6_enabled:$("[name=ipv6_enabled]",event.target).checked};try{const result=await api("/api/settings/features",{method:"PUT",body:JSON.stringify(values)});state.settings=result;if(!result.ipv6Enabled&&state.route==="ipv6")location.hash="overview";toast(t("saved"));showApp();}catch(error){toast(error.message,true);}}
 async function logout(){try{await api("/api/logout",{method:"POST"});}finally{state.user=null;showLogin();}}
 
@@ -299,6 +487,7 @@ async function copyText(value){
   } catch { toast(t("copyFailed"),true); }
 }
 function formatBytes(value){let n=Number(value)||0;const units=["B","KB","MB","GB","TB","PB"];let i=0;while(n>=1024&&i<units.length-1){n/=1024;i++;}return `${n.toFixed(i<2?0:2)} ${units[i]}`;}
+function formatTrafficBytes(value){let n=(Number(value)||0)/MB;const units=["MB","GB","TB","PB"];let i=0;while(n>=1024&&i<units.length-1){n/=1024;i++;}const digits=n>=100?0:n>=10?1:2;return `${n.toFixed(digits)} ${units[i]}`;}
 function formatSpeed(value){return `${formatBytes(value)}/s`;}
 function formatDate(value){if(!value)return t("never");return new Intl.DateTimeFormat(state.language,{dateStyle:"medium",timeStyle:"medium"}).format(new Date(value));}
 function formatTime(value){if(!value)return t("waiting");return new Intl.DateTimeFormat(state.language,{hour:"2-digit",minute:"2-digit",second:"2-digit"}).format(new Date(value));}

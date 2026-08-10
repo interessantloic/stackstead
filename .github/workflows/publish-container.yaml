@@ -6,7 +6,7 @@ on:
       - "v[0-9]+.[0-9]+.[0-9]+"
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 concurrency:
@@ -61,3 +61,101 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: mode=max
           sbom: true
+
+  release:
+    name: Create GitHub Release
+    needs: publish
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out release notes
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          notes_file="docs/releases/$GITHUB_REF_NAME.md"
+          if [[ -f "$notes_file" ]]; then
+            gh release create "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Stackstead $GITHUB_REF_NAME" \
+              --notes-file "$notes_file" \
+              --verify-tag
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Stackstead $GITHUB_REF_NAME" \
+              --generate-notes \
+              --verify-tag
+          fi
+
+  offline-bundles:
+    name: Export offline linux/${{ matrix.arch }}
+    needs: release
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - amd64
+          - arm64
+
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull image and assemble bundle
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          remote_image="ghcr.io/$GITHUB_REPOSITORY:$version"
+          local_image="stackstead:$version"
+          bundle_name="stackstead-$version-offline-linux-$ARCH"
+          bundle_dir="$RUNNER_TEMP/$bundle_name"
+
+          mkdir -p "$bundle_dir"
+          docker pull --platform "linux/$ARCH" "$remote_image"
+          docker tag "$remote_image" "$local_image"
+          docker save --output "$bundle_dir/stackstead-$version-linux-$ARCH.tar" "$local_image"
+
+          sed \
+            -e "s|^    image: .*|    image: $local_image|" \
+            -e "s|^    pull_policy: .*|    pull_policy: never|" \
+            compose.yaml > "$bundle_dir/compose.yaml"
+          cp docs/offline-deployment.md "$bundle_dir/README.md"
+          sed \
+            -e "s|^STACKSTEAD_IMAGE=.*|STACKSTEAD_IMAGE=$local_image|" \
+            -e "s|^STACKSTEAD_PULL_POLICY=.*|STACKSTEAD_PULL_POLICY=never|" \
+            -e "/^STACKSTEAD_BUILD_IMAGE=/d" \
+            .env.example > "$bundle_dir/.env"
+
+          (
+            cd "$bundle_dir"
+            sha256sum "stackstead-$version-linux-$ARCH.tar" > SHA256SUMS
+          )
+          (
+            cd "$RUNNER_TEMP"
+            zip -9 -r "$bundle_name.zip" "$bundle_name"
+            sha256sum "$bundle_name.zip" > "$bundle_name.zip.sha256"
+          )
+
+      - name: Attach bundle to GitHub Release
+        env:
+          ARCH: ${{ matrix.arch }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          bundle_name="stackstead-$version-offline-linux-$ARCH"
+          gh release upload "$GITHUB_REF_NAME" \
+            "$RUNNER_TEMP/$bundle_name.zip" \
+            "$RUNNER_TEMP/$bundle_name.zip.sha256" \
+            --repo "$GITHUB_REPOSITORY"

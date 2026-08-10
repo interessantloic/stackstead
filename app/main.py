@@ -171,6 +171,13 @@ class FeatureSettings(BaseModel):
     ipv6_enabled: bool
 
 
+class TrafficSettings(BaseModel):
+    upload_color: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")
+    download_color: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")
+    upload_max_mbps: float = Field(gt=0, le=100000)
+    download_max_mbps: float = Field(gt=0, le=100000)
+
+
 def initialized() -> bool:
     return bool(database.fetchone("SELECT id FROM users LIMIT 1"))
 
@@ -195,6 +202,10 @@ def app_settings() -> dict[str, Any]:
         "ipv6Enabled": ipv6_feature_enabled(),
         "pollSeconds": config.poll_interval_seconds,
         "sampleSeconds": config.sample_interval_seconds,
+        "trafficUploadColor": database.setting("traffic_upload_color", "#205DA6"),
+        "trafficDownloadColor": database.setting("traffic_download_color", "#0E8E3F"),
+        "trafficUploadMaxMbps": database.setting("traffic_upload_max_mbps", 12.5),
+        "trafficDownloadMaxMbps": database.setting("traffic_download_max_mbps", 125),
     }
 
 
@@ -357,10 +368,42 @@ def dashboard(_: Annotated[dict[str, Any], Depends(current_user)]) -> dict[str, 
 
 @app.get("/api/traffic/history")
 def traffic_history(
-    hours: int = 24,
+    range: str = "24h",
+    hours: int | None = None,
+    downloader_id: int | None = None,
     _: Annotated[dict[str, Any], Depends(current_user)] = None,
 ) -> dict[str, Any]:
-    return {"items": monitor.history(hours)}
+    ranges = {"30m": 1800, "1h": 3600, "6h": 21600, "24h": 86400}
+    seconds = max(3600, min(hours * 3600, monitor.retention_days * 86400)) if hours is not None else ranges.get(range)
+    if seconds is None:
+        raise HTTPException(status_code=422, detail="Unsupported traffic history range")
+    if downloader_id is not None and not database.fetchone("SELECT id FROM downloaders WHERE id=?", (downloader_id,)):
+        raise HTTPException(status_code=404, detail="Downloader not found")
+    return {"range": range, "items": monitor.history(seconds, downloader_id)}
+
+
+@app.get("/api/traffic/daily")
+def traffic_daily_history(
+    limit: int = 90,
+    _: Annotated[dict[str, Any], Depends(current_user)] = None,
+) -> dict[str, Any]:
+    return {"retentionDays": monitor.retention_days, "items": monitor.daily_history(limit)}
+
+
+@app.get("/api/traffic/daily/{date_key}")
+def traffic_daily_detail(
+    date_key: str,
+    downloader_id: int | None = None,
+    _: Annotated[dict[str, Any], Depends(current_user)] = None,
+) -> dict[str, Any]:
+    if downloader_id is not None and not database.fetchone("SELECT id FROM downloaders WHERE id=?", (downloader_id,)):
+        raise HTTPException(status_code=404, detail="Downloader not found")
+    try:
+        return monitor.daily_detail(date_key, downloader_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/api/downloaders")
@@ -737,9 +780,24 @@ def update_general(
     payload: GeneralSettings,
     _: Annotated[dict[str, Any], Depends(admin_write)],
 ) -> dict[str, Any]:
+    timezone_changed = payload.timezone != database.setting("timezone", "Asia/Shanghai")
     database.set_setting("app_name", payload.app_name)
     database.set_setting("language", payload.language)
     database.set_setting("timezone", payload.timezone)
+    if timezone_changed:
+        monitor.rebuild_daily_rollups()
+    return app_settings()
+
+
+@app.put("/api/settings/traffic")
+def update_traffic_settings(
+    payload: TrafficSettings,
+    _: Annotated[dict[str, Any], Depends(admin_write)],
+) -> dict[str, Any]:
+    database.set_setting("traffic_upload_color", payload.upload_color.upper())
+    database.set_setting("traffic_download_color", payload.download_color.upper())
+    database.set_setting("traffic_upload_max_mbps", payload.upload_max_mbps)
+    database.set_setting("traffic_download_max_mbps", payload.download_max_mbps)
     return app_settings()
 
 

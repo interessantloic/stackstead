@@ -1,6 +1,7 @@
 .env
 compose.override.yaml
 data/
+release/
 .pytest_cache/
 __pycache__/
 .venv/

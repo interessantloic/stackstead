@@ -53,6 +53,21 @@ CREATE TABLE IF NOT EXISTS traffic_samples (
 );
 CREATE INDEX IF NOT EXISTS traffic_samples_time_idx ON traffic_samples(sampled_at);
 CREATE INDEX IF NOT EXISTS traffic_samples_downloader_time_idx ON traffic_samples(downloader_id, sampled_at);
+CREATE TABLE IF NOT EXISTS traffic_daily_totals (
+    date_key TEXT NOT NULL,
+    downloader_id INTEGER NOT NULL REFERENCES downloaders(id) ON DELETE CASCADE,
+    download_bytes INTEGER NOT NULL DEFAULT 0,
+    upload_bytes INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(date_key, downloader_id)
+);
+CREATE INDEX IF NOT EXISTS traffic_daily_totals_date_idx ON traffic_daily_totals(date_key DESC);
+CREATE TABLE IF NOT EXISTS traffic_daily_peaks (
+    date_key TEXT PRIMARY KEY,
+    peak_download_speed INTEGER NOT NULL DEFAULT 0,
+    peak_download_at TEXT,
+    peak_upload_speed INTEGER NOT NULL DEFAULT 0,
+    peak_upload_at TEXT
+);
 CREATE TABLE IF NOT EXISTS ipv6_devices (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -123,7 +138,7 @@ class Database:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as connection:
             connection.executescript(SCHEMA)
-            connection.execute("PRAGMA user_version = 1")
+            connection.execute("PRAGMA user_version = 2")
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
